@@ -39,7 +39,9 @@ dependencies = [
   "jinja2",
   "requests",
   "mime>=0.1.0",
-  "mistune>=3.1.2",
+
+  "markdown>=3.6",
+  "pymdown-extensions>=10.8",
 ]
 
 [dependency-groups]

@@ -22,8 +22,7 @@ def test_plugin_initialization():
     assert plugin.enabled is True
     assert plugin.simple_log is False
     assert plugin.flen == 1
-    assert plugin.confluence_renderer is not None
-    assert plugin.confluence_mistune is not None
+    assert plugin.md is not None
     assert plugin.session is not None
     assert plugin.page_attachments == {}
 

@@ -18,14 +18,14 @@ from pathlib import Path
 from time import sleep
 from typing import Any
 
-import mistune
+import markdown
 import requests
 from mkdocs.config import config_options
 from mkdocs.plugins import BasePlugin
 from requests.auth import AuthBase
 
-from mkdocs_to_confluence._vendor.md2cf.confluence_renderer import ConfluenceRenderer
 from mkdocs_to_confluence.exporter import ConfluenceExporter
+from mkdocs_to_confluence.markdown_to_confluence import ConfluenceExtension
 
 TEMPLATE_BODY = "<p> TEMPLATE </p>"
 
@@ -105,8 +105,31 @@ class MkdocsWithConfluence(BasePlugin):
     def __init__(self):
         """Initialize plugin with default settings."""
         self.enabled = True
-        self.confluence_renderer = ConfluenceRenderer()
-        self.confluence_mistune = mistune.Markdown(renderer=self.confluence_renderer)
+        # Initialize Python-Markdown with extensions
+        # These extensions match what MkDocs Material typically uses + ConfluenceExtension
+        self.md = markdown.Markdown(
+            extensions=[
+                'tables',
+                'attr_list',
+                'md_in_html',
+                'pymdownx.highlight',
+                'pymdownx.superfences',
+                'pymdownx.details',
+                'sane_lists',
+                'fenced_code',
+                'admonition',
+                'def_list',
+                'footnotes',
+                'abbr',
+                'pymdownx.tasklist',
+                'pymdownx.emoji',
+                'pymdownx.keys',
+                'pymdownx.mark',
+                'pymdownx.caret',
+                'pymdownx.tilde',
+                ConfluenceExtension()
+            ]
+        )
         self.simple_log = False
         self.flen = 1
         self.session = requests.Session()
@@ -372,7 +395,7 @@ class MkdocsWithConfluence(BasePlugin):
                 attachments.append(match.group(1))
 
             # Find images in markdown format ![](path)
-            for match in re.finditer(r"!\[[\w\. -]*\]\((?!http|file)([^\s,]*).*\)", markdown):
+            for match in re.finditer(r"!\[[\w\. -]*\]\((?!http|file)([^\s\)]*).*\)", markdown):
                 file_path = match.group(1).lstrip("./\\")
                 attachments.append(file_path)
 
@@ -568,8 +591,8 @@ class MkdocsWithConfluence(BasePlugin):
         )
         new_markdown = re.sub(r'" style="page-break-inside: avoid;">', '"/></ac:image></p>', new_markdown)
 
-        # Convert to Confluence format
-        confluence_body = self.confluence_mistune(new_markdown)
+        # Convert to Confluence format using Python-Markdown
+        confluence_body = self.md.convert(new_markdown)
 
         if self.config.get("debug_diff", False):
             logger.info(f"Converted Confluence content for '{page_name}' ({len(confluence_body)} chars)")
@@ -1102,7 +1125,7 @@ class MkdocsWithConfluence(BasePlugin):
         if self.config["debug"]:
             logger.debug(f"SECTION title: {section}")
         try:
-            r = re.search("Section\\(title='(.*)'\\)", section)
+            r = re.search(r"Section\(title='(.*)'\)", section)
             if r:
                 return r.group(1)
             # If regex doesn't match, try to get section name as fallback
@@ -1132,7 +1155,7 @@ class MkdocsWithConfluence(BasePlugin):
 
         """
         try:
-            r = re.search("\\s*Page\\(title='(.*)',", section)
+            r = re.search(r"\s*Page\(title='(.*)',", section)
             if r:
                 return r.group(1)
             # If regex doesn't match, try page URL as fallback
@@ -1182,7 +1205,7 @@ class MkdocsWithConfluence(BasePlugin):
             attachment_message = f"MKDocsWithConfluence [v{file_hash}]"
             existing_attachment = self.get_attachment(page_id, filepath)
             if existing_attachment:
-                file_hash_regex = re.compile(r"\[v([a-f0-9]{40})]$")
+                file_hash_regex = re.compile(r"[v([a-f0-9]{40})]$")
                 existing_match = file_hash_regex.search(existing_attachment["version"]["message"])
                 if existing_match is not None and existing_match.group(1) == file_hash:
                     # Attachment exists and hash matches - skip
@@ -1603,7 +1626,8 @@ class MkdocsWithConfluence(BasePlugin):
                 logger.error(f"Failed to delete page ID: {page_id}")
 
     def wait_until(
-        self, condition: Callable[[], bool] | bool, interval: float = 0.1, timeout: int = 10, max_retries: int = 3
+        self,
+        condition: Callable[[], bool] | bool, interval: float = 0.1, timeout: int = 10, max_retries: int = 3
     ) -> bool:
         """Wait until a condition is met, with retry mechanism.
 
