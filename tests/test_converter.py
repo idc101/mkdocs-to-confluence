@@ -10,42 +10,44 @@ from mkdocs_to_confluence.markdown_to_confluence import ConfluenceExtension
 
 # Set up logging for debugging
 logging.basicConfig(level=logging.DEBUG)
-logging.getLogger().setLevel(logging.DEBUG) # Set root logger to DEBUG
-log = logging.getLogger('TESTS')
+logging.getLogger().setLevel(logging.DEBUG)  # Set root logger to DEBUG
+log = logging.getLogger("TESTS")
 
 
 # Define the common extensions for Python-Markdown
 COMMON_MKDOCS_EXTENSIONS = [
-    'tables',
-    'attr_list',
-    'md_in_html',
-    'pymdownx.highlight',
-    'pymdownx.superfences',
-    'pymdownx.details',
-    'sane_lists',
-    'fenced_code',
-    'admonition',
-    'def_list',
-    'footnotes',
-    'abbr',
-    'pymdownx.tasklist',
-    'pymdownx.emoji',
-    'pymdownx.keys',
-    'pymdownx.mark',
-    'pymdownx.caret',
-    'pymdownx.tilde',
+    "tables",
+    "attr_list",
+    "md_in_html",
+    "pymdownx.highlight",
+    "pymdownx.superfences",
+    "pymdownx.details",
+    "sane_lists",
+    "fenced_code",
+    "admonition",
+    "def_list",
+    "footnotes",
+    "abbr",
+    "pymdownx.tasklist",
+    "pymdownx.emoji",
+    "pymdownx.keys",
+    "pymdownx.mark",
+    "pymdownx.caret",
+    "pymdownx.tilde",
 ]
+
 
 def assert_xml_equal(actual, expected):
     """Compare XML strings ignoring whitespace between tags."""
     # Remove whitespace between tags: > space <  -> ><
-    normalized_actual = re.sub(r'>\s+<', '><', actual).strip()
-    normalized_expected = re.sub(r'>\s+<', '><', expected).strip()
+    normalized_actual = re.sub(r">\s+<", "><", actual).strip()
+    normalized_expected = re.sub(r">\s+<", "><", expected).strip()
     # Also collapse internal whitespace
-    normalized_actual = re.sub(r'\s+', ' ', normalized_actual)
-    normalized_expected = re.sub(r'\s+', ' ', normalized_expected)
+    normalized_actual = re.sub(r"\s+", " ", normalized_actual)
+    normalized_expected = re.sub(r"\s+", " ", normalized_expected)
 
     assert normalized_actual == normalized_expected, f"\nExpected:\n{normalized_expected}\nActual:\n{normalized_actual}"
+
 
 def test_text_formatting():
     """Test conversion of basic text formatting."""
@@ -69,6 +71,7 @@ def test_text_formatting():
 """
     md = markdown.Markdown(extensions=COMMON_MKDOCS_EXTENSIONS + [ConfluenceExtension()])
     assert_xml_equal(md.convert(md_text), expected)
+
 
 def test_lists():
     """Test conversion of ordered, unordered, and task lists."""
@@ -127,6 +130,7 @@ def test_lists():
     md = markdown.Markdown(extensions=COMMON_MKDOCS_EXTENSIONS + [ConfluenceExtension()])
     assert_xml_equal(md.convert(md_text), expected)
 
+
 def test_admonitions():
     """Test conversion of admonitions."""
     md_text = textwrap.dedent("""
@@ -153,19 +157,36 @@ def test_admonitions():
     md = markdown.Markdown(extensions=COMMON_MKDOCS_EXTENSIONS + [ConfluenceExtension()])
     assert_xml_equal(md.convert(md_text), expected)
 
+
 def test_links_and_images():
     """Test conversion of links and images."""
     md_text = textwrap.dedent("""
-        [Go to Home](index.md)
+        [Go to Another Page](another_page.md)
 
         ![Example Diagram](assets/diagram.png)
     """)
     expected = """
-<p><a href="index.md">Go to Home</a></p>
+<p><ac:link><ri:page ri:content-title="Another Page" /></ac:link></p>
 <p><ac:image ac:alt="Example Diagram"><ri:attachment ri:filename="diagram.png" /></ac:image></p>
 """
     md = markdown.Markdown(extensions=COMMON_MKDOCS_EXTENSIONS + [ConfluenceExtension()])
     assert_xml_equal(md.convert(md_text), expected)
+
+
+def test_local_links():
+    """Test conversion of links and images."""
+    md_text = textwrap.dedent("""
+        [Go to Heading One](#heading-one)
+
+        ## Heading One
+    """)
+    expected = """
+<p><ac:link ac:anchor="HeadingOne"><ac:plain-text-link-body><![CDATA[Go to Heading One]]></ac:plain-text-link-body></ac:link></p>
+<p><h2>Heading One</h2></p>
+"""
+    md = markdown.Markdown(extensions=COMMON_MKDOCS_EXTENSIONS + [ConfluenceExtension()])
+    assert_xml_equal(md.convert(md_text), expected)
+
 
 def test_footnotes():
     """Test conversion of footnotes."""
@@ -178,8 +199,9 @@ def test_footnotes():
     output = md.convert(md_text)
     assert '<sup id="fnref:1">' in output
     assert '<div class="footnote">' in output
-    assert '<ol>' in output
+    assert "<ol>" in output
     assert '<li id="fn:1">' in output
+
 
 def test_keyboard_keys():
     """Test conversion of keyboard keys."""
@@ -188,6 +210,7 @@ def test_keyboard_keys():
     output = md.convert(md_text)
     assert 'class="keys"' in output
     assert 'class="key-control"' in output
+
 
 def test_tables():
     """Test conversion of tables."""
@@ -225,12 +248,13 @@ def test_tables():
     md = markdown.Markdown(extensions=COMMON_MKDOCS_EXTENSIONS + [ConfluenceExtension()])
     assert_xml_equal(md.convert(md_text), expected)
 
+
 def test_emoji():
     """Test conversion of emojis."""
     md_text = ":rocket:"
     md = markdown.Markdown(extensions=COMMON_MKDOCS_EXTENSIONS + [ConfluenceExtension()])
     output = md.convert(md_text)
     # Expect ac:image tag (normalized to <tag ... /> by Postprocessor)
-    assert '<ac:image' in output
-    assert 'ri:value=' in output
-    assert '1f680.png' in output
+    assert "<ac:image" in output
+    assert "ri:value=" in output
+    assert "1f680.png" in output
