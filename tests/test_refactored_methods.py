@@ -99,7 +99,7 @@ def test_extract_attachments_file_protocol():
     markdown = '<img src="file:///tmp/image1.png" s'
     attachments = plugin._extract_attachments(markdown)
 
-    assert "/tmp/image1.png" in attachments
+    assert "/tmp/image1.png" in attachments  # noqa: S108
 
 
 def test_extract_attachments_markdown_format():
@@ -119,13 +119,13 @@ def test_extract_attachments_mixed_formats():
     plugin = MkdocsWithConfluence()
     plugin.config = MINIMAL_CONFIG.copy()
 
-    markdown = '''
+    markdown = """
     <img src="file:///tmp/temp_image.png" s
     ![Diagram](./diagrams/architecture.png)
-    '''
+    """
     attachments = plugin._extract_attachments(markdown)
 
-    assert "/tmp/temp_image.png" in attachments
+    assert "/tmp/temp_image.png" in attachments  # noqa: S108
     assert "diagrams/architecture.png" in attachments
     assert "docs/diagrams/architecture.png" in attachments
 
@@ -168,7 +168,7 @@ def test_convert_to_confluence_format_replaces_image_tags():
 
     # Verify image tag was transformed
     assert '<img src="file:///tmp/' not in confluence_body
-    assert 'ac:image' in confluence_body or '<p>' in confluence_body
+    assert "ac:image" in confluence_body or "<p>" in confluence_body
 
     # Verify content is not empty
     assert len(confluence_body) > 0
@@ -186,7 +186,7 @@ def test_convert_to_confluence_format_creates_temp_file():
     assert isinstance(confluence_body, str)
     assert len(confluence_body) > 0
     # Check that markdown was converted to HTML
-    assert '<h1>' in confluence_body or 'Test Header' in confluence_body
+    assert "<h1>" in confluence_body or "Test Header" in confluence_body
 
 
 def test_convert_to_confluence_format_handles_special_chars_in_page_name():
@@ -200,4 +200,4 @@ def test_convert_to_confluence_format_handles_special_chars_in_page_name():
     # Verify content was converted successfully
     assert isinstance(confluence_body, str)
     assert len(confluence_body) > 0
-    assert '<h1>' in confluence_body or 'Test' in confluence_body
+    assert "<h1>" in confluence_body or "Test" in confluence_body

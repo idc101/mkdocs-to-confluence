@@ -1,3 +1,11 @@
+"""Custom Markdown extension for MkDocs to convert Markdown to Confluence Storage Format (XHTML).
+
+This module defines a Markdown extension that hooks into the Markdown processing
+pipeline to transform standard HTML elements generated from Markdown into
+Confluence-compatible XHTML, including macros for code blocks, admonitions,
+and handling of images/attachments.
+"""
+
 import logging
 import re
 import xml.etree.ElementTree as ET
@@ -12,7 +20,19 @@ log = logging.getLogger("MARKDOWN")  # Use Markdown's logger
 
 
 class ConfluenceTreeprocessor(Treeprocessor):
+    """A Markdown Treeprocessor for Confluence.
+
+    Transforms the ElementTree from standard
+    Markdown HTML into Confluence Storage Format (XHTML).
+    """
+
     def run(self, root):
+        """Process the ElementTree to convert elements into Confluence format.
+
+        Args:
+            root: The root element of the ElementTree.
+
+        """
         log.debug("ConfluenceTreeprocessor running...")
         self._clean_headers(root)
         self._convert_code_blocks(root)
@@ -75,6 +95,15 @@ class ConfluenceTreeprocessor(Treeprocessor):
                 self._replace_element(root, div_element, ac_macro)
 
     def _convert_code_blocks(self, root):
+        """Convert standard HTML code blocks into Confluence.
+
+        e.g. `<pre><code>...</code></pre>`
+        into `<ac:structured-macro ac:name="code">` macros.
+
+        Args:
+            root: The root element of the ElementTree.
+
+        """
         log.debug("Converting code blocks...")
         # Find all pre elements
         for pre_element in root.findall(".//pre"):
@@ -100,21 +129,9 @@ class ConfluenceTreeprocessor(Treeprocessor):
                 ac_parameter.text = language
 
                 # Add plain-text-body with CDATA
-                # ElementTree doesn't support CDATA natively in a simple way for just one element.
-                # However, for Confluence, the content of plain-text-body is usually just text.
-                # Special characters need to be escaped if we treat it as standard XML text,
-                # but Confluence expects CDATA for code blocks to preserve formatting and special chars.
-                # Since we are generating an ElementTree, setting .text will automatically escape <, >, &
-                # which might be what we want if we don't strictly enforce CDATA wrapping in the output string yet.
-                # BUT, Confluence storage format specifically uses <ac:plain-text-body><![CDATA[...]]></ac:plain-text-body>
-                # To achieve this with standard ElementTree is tricky.
-                # A common workaround is to use a special marker or just let it escape and rely on Confluence to interpret it,
-                # but usually CDATA is required for code.
-
-                # For now, let's just set the text and see if `tostring` escapes it correctly.
-                # If Confluence requires literal CDATA wrapping, we might need a post-processing step
-                # or a custom serializer.
-                # Let's try standard text assignment first.
+                # ElementTree doesn't support CDATA natively in a simple way.
+                # Confluence expects CDATA for code blocks.
+                # For now, set the text and rely on post-processing for CDATA.
                 ac_body = SubElement(ac_macro, "ac:plain-text-body")
                 ac_body.text = code_element.text
 
@@ -122,6 +139,12 @@ class ConfluenceTreeprocessor(Treeprocessor):
                 self._replace_element(root, pre_element, ac_macro)
 
     def _clean_headers(self, root):
+        """Clean headers by removing 'id' attributes and 'headerlink' anchors.
+
+        Args:
+            root: The root element of the ElementTree.
+
+        """
         log.debug("Cleaning headers...")
         for i in range(1, 7):  # h1 to h6
             for header_element in root.findall(f".//h{i}"):
@@ -137,6 +160,12 @@ class ConfluenceTreeprocessor(Treeprocessor):
                         header_element.remove(child)
 
     def _convert_images_and_links(self, root):
+        """Convert image tags to Confluence attachments or external links.
+
+        Args:
+            root: The root element of the ElementTree.
+
+        """
         log.debug("Converting images and links...")
         for img_element in root.findall(".//img"):
             log.debug(f"Found img: {tostring(img_element).decode()}")
@@ -145,11 +174,11 @@ class ConfluenceTreeprocessor(Treeprocessor):
 
             if not re.match(r"^(http|https)://", src):
                 ac_image = Element("ac:image", attrib={"ac:alt": alt})
-                ri_attachment = SubElement(ac_image, "ri:attachment", attrib={"ri:filename": Path(src).name})
+                SubElement(ac_image, "ri:attachment", attrib={"ri:filename": Path(src).name})
                 log.debug(f"Converted img to attachment: {tostring(ac_image).decode()}")
             else:
                 ac_image = Element("ac:image", attrib={"ac:alt": alt})
-                ri_url = SubElement(ac_image, "ri:url", attrib={"ri:value": src})
+                SubElement(ac_image, "ri:url", attrib={"ri:value": src})
                 log.debug(f"Converted img to url: {tostring(ac_image).decode()}")
 
             # Replace the img element with ac:image
@@ -170,6 +199,14 @@ class ConfluenceTreeprocessor(Treeprocessor):
                 pass
 
     def _convert_tables(self, root):
+        """Convert tables to Confluence format.
+
+        Adds data-layout and wraps them in `<p>` tags, and handling text alignment.
+
+        Args:
+            root: The root element of the ElementTree.
+
+        """
         log.debug("Converting tables...")
 
         # Build parent map once before modifications to allow tree manipulation
@@ -230,6 +267,17 @@ class ConfluenceTreeprocessor(Treeprocessor):
                             del cell.attrib["style"]
 
     def _replace_element(self, root, old_element, new_element):
+        """Replace an old element with a new element in the ElementTree.
+
+        Args:
+            root: The root element of the ElementTree.
+            old_element: The element to be replaced.
+            new_element: The element to replace with.
+
+        Returns:
+            True if the element was replaced, False otherwise.
+
+        """
         parent_map = {c: p for p in root.iter() for c in p}
         parent = parent_map.get(old_element)
         if parent is not None:
@@ -251,6 +299,12 @@ class ConfluenceTreeprocessor(Treeprocessor):
         return False
 
     def _convert_inline_formatting(self, root):
+        """Convert inline formatting tags like <mark> and <del> to Confluence-compatible HTML.
+
+        Args:
+            root: The root element of the ElementTree.
+
+        """
         log.debug("Converting inline formatting...")
         # Handle mark -> span style background
         for elem in root.findall(".//mark"):
@@ -265,19 +319,40 @@ class ConfluenceTreeprocessor(Treeprocessor):
 
 
 class ConfluencePostprocessor(Postprocessor):
+    """A Markdown Postprocessor for Confluence.
+
+    Performs final transformations on the
+    rendered HTML text to ensure Confluence compatibility.
+    """
+
     def run(self, text):
+        """Process raw HTML text output from Markdown to fix Confluence specific issues.
+
+        Args:
+            text: The raw HTML text output by Markdown.
+
+        Returns:
+            The processed HTML text, ready for Confluence.
+
+        """
         log.debug(f"ConfluencePostprocessor running on text length: {len(text)}")
 
         # Fix boolean attributes for XML parsing
         # pymdownx tasklists produce <input disabled checked> which is not valid XML
         text = re.sub(r"(\s)(checked|disabled)(?=[\s/>])", r'\1\2="\2"', text)
 
-        namespaces = 'xmlns:ac="http://www.atlassian.com/schema/confluence/4/ac/" xmlns:ri="http://www.atlassian.com/schema/confluence/4/ri/"'
+        namespaces = (
+            'xmlns:ac="http://www.atlassian.com/schema/confluence/4/ac/" '
+            'xmlns:ri="http://www.atlassian.com/schema/confluence/4/ri/"'
+        )
         wrapped_text = f"<root {namespaces}>{text}</root>"
         try:
+            # S314: Using `xml` to parse untrusted data is vulnerable to XML attacks;
+            # however, in this context, the XML is generated internally from Markdown,
+            # so the risk of untrusted XML were parsed, `defusedxml` would be necessary.
             ET.register_namespace("ac", "http://www.atlassian.com/schema/confluence/4/ac/")
             ET.register_namespace("ri", "http://www.atlassian.com/schema/confluence/4/ri/")
-            root = ET.fromstring(wrapped_text)
+            root = ET.fromstring(wrapped_text)  # noqa: S314
             log.debug(f"Parsed root: {root.tag}. Child count: {len(root)}")
         except ET.ParseError as e:
             log.warning(f"Failed to parse output as XML in ConfluencePostprocessor: {e}. Skipping fixups.")
@@ -330,6 +405,17 @@ class ConfluencePostprocessor(Postprocessor):
         return new_text
 
     def _replace_element(self, root, old_element, new_element):
+        """Replace an old element with a new element in the ElementTree.
+
+        Args:
+            root: The root element of the ElementTree.
+            old_element: The element to be replaced.
+            new_element: The element to replace with.
+
+        Returns:
+            True if the element was replaced, False otherwise.
+
+        """
         parent_map = {c: p for p in root.iter() for c in p}
         parent = parent_map.get(old_element)
         if parent is not None:
@@ -341,11 +427,23 @@ class ConfluencePostprocessor(Postprocessor):
 
 
 class ConfluenceExtension(Extension):
+    """An MkDocs Markdown extension to enable Confluence Storage Format output.
+
+    Registers the ConfluenceTreeprocessor and ConfluencePostprocessor.
+    """
+
     def __init__(self, *args, **kwargs):
+        """Initialize the extension."""
         self.config = {"base_url": ["", "Base URL for Confluence instance (e.g., https://your.atlassian.net/wiki)"]}
         super().__init__(*args, **kwargs)
 
     def extendMarkdown(self, md):
+        """Register the ConfluenceTreeprocessor and ConfluencePostprocessor with Markdown.
+
+        Args:
+            md: The Markdown instance.
+
+        """
         # Register the treeprocessor
         # ConfluenceTreeprocessor runs after all other Markdown processing
         # and transforms the standard HTML ElementTree into Confluence XHTML.
@@ -361,4 +459,10 @@ class ConfluenceExtension(Extension):
 
 
 def makeExtension(**kwargs):
+    """Create an instance of the ConfluenceExtension.
+
+    Returns:
+        ConfluenceExtension: An instance of the ConfluenceExtension.
+
+    """
     return ConfluenceExtension(**kwargs)
