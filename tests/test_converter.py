@@ -182,7 +182,7 @@ def test_local_links():
     """)
     expected = """
 <p><ac:link ac:anchor="HeadingOne"><ac:plain-text-link-body><![CDATA[Go to Heading One]]></ac:plain-text-link-body></ac:link></p>
-<p><h2>Heading One</h2></p>
+<h2>Heading One</h2>
 """
     md = markdown.Markdown(extensions=COMMON_MKDOCS_EXTENSIONS + [ConfluenceExtension()])
     assert_xml_equal(md.convert(md_text), expected)

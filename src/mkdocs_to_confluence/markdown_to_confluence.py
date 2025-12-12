@@ -8,6 +8,7 @@ and handling of images/attachments.
 
 import logging
 import re
+import html
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from xml.etree.ElementTree import Element, SubElement, tostring
@@ -185,18 +186,35 @@ class ConfluenceTreeprocessor(Treeprocessor):
             # ElementTree doesn't have parent pointers, so we find and replace
             self._replace_element(root, img_element, ac_image)
 
-        # Handle internal links - MkDocs produces href="#anchor" or href="page#anchor"
-        # Confluence links are typically handled by page titles or content IDs,
-        # but internal page anchors remain as href="#anchor"
+        # Handle links
         for a_element in root.findall(".//a"):
             href = a_element.attrib.get("href", "")
+            text = a_element.text or ""
+
             if href.startswith("#"):
-                # Internal anchor link. Ensure only href is present.
-                log.debug(f"Found anchor link: {tostring(a_element).decode()} - cleaning attributes")
-                a_element.attrib = {"href": href}  # Keep only href
-            elif not re.match(r"^(http|https)://", href):
-                # Assume internal page link (e.g., ../page.md)
-                pass
+                # Anchor link
+                anchor = href[1:]  # remove #
+                # Convert slug to TitleCase (e.g. heading-one -> HeadingOne)
+                parts = anchor.split("-")
+                anchor_title = "".join(part.capitalize() for part in parts)
+
+                ac_link = Element("ac:link", attrib={"ac:anchor": anchor_title})
+                ac_body = SubElement(ac_link, "ac:plain-text-link-body")
+                ac_body.text = text
+
+                log.debug(f"Converted anchor link: {tostring(ac_link).decode()}")
+                self._replace_element(root, a_element, ac_link)
+
+            elif not re.match(r"^(http|https)://", href) and href.endswith(".md"):
+                # Page link
+                filename = Path(href).stem  # another_page
+                page_title = filename.replace("_", " ").replace("-", " ").title()
+
+                ac_link = Element("ac:link")
+                SubElement(ac_link, "ri:page", attrib={"ri:content-title": page_title})
+
+                log.debug(f"Converted page link: {tostring(ac_link).decode()}")
+                self._replace_element(root, a_element, ac_link)
 
     def _convert_tables(self, root):
         """Convert tables to Confluence format.
@@ -402,6 +420,21 @@ class ConfluencePostprocessor(Postprocessor):
         if new_text.startswith("<root") and new_text.endswith("</root>"):
             start_content = new_text.find(">") + 1
             new_text = new_text[start_content:-7]
+
+        # CDATA wrapping for plain-text bodies
+        # This is a hack because ElementTree doesn't support CDATA.
+        # We find <ac:plain-text-body>...</ac:plain-text-body> and wrap content in CDATA,
+        # unescaping it first (because tostring() escaped it).
+        def cdata_repl(match):
+            tag = match.group(1)
+            content = match.group(2)
+            # Unescape content (e.g. &lt; -> <)
+            content = html.unescape(content)
+            return f"<{tag}><![CDATA[{content}]]></{tag}>"
+
+        pattern = r"<(ac:plain-text-body|ac:plain-text-link-body)>(.*?)</\1>"
+        new_text = re.sub(pattern, cdata_repl, new_text, flags=re.DOTALL)
+
         return new_text
 
     def _replace_element(self, root, old_element, new_element):
